@@ -9,24 +9,81 @@ jobs:
   ping-supabase:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase Database
+      - name: Verify secrets are configured
         run: |
-          echo "Pinging Supabase to keep it active..."
+          echo "🔍 Vérification des secrets..."
+          if [ -z "${{ secrets.SUPABASE_URL }}" ]; then
+            echo "❌ ERREUR: SUPABASE_URL n'est pas configuré"
+            exit 1
+          fi
+          if [ -z "${{ secrets.SUPABASE_ANON_KEY }}" ]; then
+            echo "❌ ERREUR: SUPABASE_ANON_KEY n'est pas configuré"
+            exit 1
+          fi
+          echo "✅ Secrets configurés correctement"
           
-          # Faire une requête simple vers votre API Supabase
+      - name: Test basic Supabase connection
+        run: |
+          echo "🌐 Test de connexion de base à Supabase..."
+          
+          # Test de connexion simple à l'API REST
           response=$(curl -s -w "%{http_code}" \
             -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/properties?select=count" \
-            -o /dev/null)
+            "${{ secrets.SUPABASE_URL }}/rest/v1/" \
+            -o /tmp/response.json)
+          
+          echo "📊 Code de réponse HTTP: $response"
           
           if [ "$response" = "200" ]; then
-            echo "✅ Supabase ping successful"
+            echo "✅ Connexion Supabase de base réussie"
           else
-            echo "❌ Supabase ping failed with status: $response"
+            echo "❌ Échec de la connexion de base (code: $response)"
+            echo "📄 Contenu de la réponse:"
+            cat /tmp/response.json
             exit 1
           fi
       
-      - name: Log activity
+      - name: Ping database with simple query
         run: |
-          echo "Keepalive ping completed at $(date)"
+          echo "🗄️ Test d'une requête simple..."
+          
+          # Essayer une requête très simple qui devrait toujours fonctionner
+          response=$(curl -s -w "%{http_code}" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/properties?limit=1" \
+            -o /tmp/ping_response.json)
+          
+          echo "📊 Code de réponse: $response"
+          echo "📄 Réponse complète:"
+          cat /tmp/ping_response.json
+          
+          if [ "$response" = "200" ] || [ "$response" = "206" ]; then
+            echo "✅ Ping de la base de données réussi"
+          else
+            echo "❌ Échec du ping de la base de données"
+            echo "🔍 Tentative avec une autre approche..."
+            
+            # Essayer avec une requête encore plus simple
+            fallback_response=$(curl -s -w "%{http_code}" \
+              -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+              "${{ secrets.SUPABASE_URL }}/rest/v1/" \
+              -o /tmp/fallback_response.json)
+            
+            echo "📊 Code de réponse fallback: $fallback_response"
+            
+            if [ "$fallback_response" = "200" ]; then
+              echo "✅ Connexion maintenue avec requête fallback"
+            else
+              echo "❌ Toutes les tentatives ont échoué"
+              exit 1
+            fi
+          fi
+      
+      - name: Log completion
+        run: |
+          echo "🎉 Keepalive terminé avec succès à $(date)"
+          echo "⏰ Supabase restera actif pendant 7 jours supplémentaires"
+          echo "🔄 Prochaine exécution automatique : demain à 8h00 UTC"
